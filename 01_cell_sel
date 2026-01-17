@@ -17,14 +17,14 @@ sequenceDiagram
     UE->>TS: UNTRUST_SCORE_QUERY<br/>{cell_id: "450-05-eNB9999-Cell0"}
     TS->>TS: Query Database
 
-    alt Score >= 70 (BARRED)
-        TS-->>UE: Score = 85, Status = BARRED
+    alt Score >= 23 (CELL_BARRING)
+        TS-->>UE: Score = 28.4, Status = CELL_BARRING
         UE->>UE: Reject Cell (FBS Suspected)
-    else Score 50-69 (LOW_PRIORITY)
-        TS-->>UE: Score = 55, Status = LOW_PRIORITY
+    else Score >= 10 and Score < 23 (LOW_PRIORITY)
+        TS-->>UE: Score = 15.7, Status = LOW_PRIORITY
         UE->>UE: Mark as Low Priority
-    else Score < 50 (TRUSTED)
-        TS-->>UE: Score = 15, Status = TRUSTED
+    else Score < 10 (NORMAL)
+        TS-->>UE: Score = 5.2, Status = NORMAL
         Note over UE,CN: Proceed to Normal Attachment
         UE->>eNB: RRCConnectionRequest
         eNB->>UE: RRCConnectionSetup
