@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    participant TS as Trust Server
+    participant UE as UE (User Equipment)
+    participant eNB as eNB/gNB
+    participant CN as Core Network (MME/AMF)
+
+    Note over UE,eNB: Cell Search & System Information
+    UE->>eNB: PSS/SSS Synchronization
+    eNB-->>UE: Physical Cell ID (PCI)
+    UE->>eNB: Read MIB (Master Information Block)
+    UE->>eNB: Read SIB1 (System Information Block 1)
+    Note over eNB: SIB1 contains Global Cell ID:<br/>PLMN-ID + Cell Identity
+    eNB-->>UE: Global Cell ID = "450-05-eNB9999-Cell0"
+
+    Note over UE,TS: Trust Server Query for Untrust Score
+    UE->>TS: UNTRUST_SCORE_QUERY<br/>{cell_id: "450-05-eNB9999-Cell0"}
+    TS->>TS: Query Database
+
+    alt Score >= 70 (BARRED)
+        TS-->>UE: Score = 85, Status = BARRED
+        UE->>UE: Reject Cell (FBS Suspected)
+    else Score 50-69 (LOW_PRIORITY)
+        TS-->>UE: Score = 55, Status = LOW_PRIORITY
+        UE->>UE: Mark as Low Priority
+    else Score < 50 (TRUSTED)
+        TS-->>UE: Score = 15, Status = TRUSTED
+        Note over UE,CN: Proceed to Normal Attachment
+        UE->>eNB: RRCConnectionRequest
+        eNB->>UE: RRCConnectionSetup
+        UE->>eNB: RRCConnectionSetupComplete
+        UE->>CN: ATTACH REQUEST
+        CN->>UE: AKA Authentication
+        UE->>CN: Authentication Response
+        CN->>UE: Security Mode Command (EEA2/EIA2)
+        UE->>CN: Security Mode Complete
+        CN->>UE: ATTACH ACCEPT
+    end
