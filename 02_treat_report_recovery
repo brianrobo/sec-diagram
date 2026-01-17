@@ -1,9 +1,9 @@
 sequenceDiagram
     autonumber
+    participant TS as Trust Server
     participant UE as UE (User Equipment)
     participant FBS as Suspicious gNB/eNB
     participant LegitBS as Legitimate gNB/eNB
-    participant TS as Trust Server
     participant CN as Core Network (AMF/MME)
 
     Note over UE,CN: 확장 가능한 위협 시나리오 탐지 및 복구 프레임워크
