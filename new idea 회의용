@@ -84,3 +84,100 @@
 
 **Would you like me to...**
 회의 발표를 위해 위 내용 중 **'가변 가중치 알고리즘의 수식'** 부분을 더 구체화해 드릴까요, 아니면 **'Mermaid 시퀀스 다이어그램 코드'**를 생성해 드릴까요?
+
+
+
+
+
+
+
+회의 프리뷰를 위해 가장 설득력 있는 도구인 **Mermaid 시퀀스 다이어그램**과 **알고리즘 수식 상세**를 작성해 드립니다. 이 내용을 그대로 회의 자료에 붙여넣으시면 기술적 깊이가 확 살아날 거예요.
+
+---
+
+### 1. 전반적인 시스템 시퀀스 다이어그램 (Mermaid)
+
+이 다이어그램은 **[탐지 → 스코어링 → 차단 → 복구]**로 이어지는 전체 라이프사이클을 보여줍니다.
+
+```mermaid
+sequenceDiagram
+    participant UE as 단말 (UE)
+    participant Server as 평판 서버 (Trust Server)
+    participant BS as 기지국 (Normal/Fake)
+
+    Note over UE, BS: [Step 1: Prevention]
+    UE->>Server: Get Untrust Score (Global Cell ID)
+    Server-->>UE: Score (e.g., 5.0 - Normal)
+    UE->>BS: Cell Selection & Access
+
+    Note over UE, BS: [Step 2: Threat Detection]
+    BS->>UE: Identity Request (without Auth)
+    Note right of BS: IMSI Catcher Scenario Detected
+    UE->>Server: Report Event (IMSI Catcher, 20pts)
+    
+    Note over Server: Apply Variable Alpha EMA<br/>Score: 8.0 (Normal)
+
+    BS->>UE: Attach Accept (Null Ciphering)
+    Note right of BS: Critical Threat Detected
+    UE->>Server: Report Event (Null Cipher, 50pts)
+    
+    Note over Server: Apply Variable Alpha EMA<br/>Score: 24.8 (Barring Threshold)
+
+    Note over UE, BS: [Step 3: Protection]
+    UE->>UE: Threshold (23) Exceeded<br/>Immediate Cell Barring
+    UE->>BS: Connection Terminated
+
+    Note over UE, BS: [Step 4: Recovery]
+    Note right of BS: Attacker disappears,<br/>Legitimate BS takes over ID
+    UE->>BS: AKA Authentication Procedure
+    BS->>UE: AKA Success
+    UE->>Server: Report Event (AKA Success, 0pts)
+    
+    Note over Server: Apply High Alpha Recovery<br/>Score: 4.9 (Normal)
+    Server-->>UE: Score Cleared
+    Note over UE: Cell Re-accessible
+
+```
+
+---
+
+### 2. 가변 가중치(EMA) 알고리즘 상세 (수식)
+
+회의에서 "왜 그냥 평균이 아닌가?"라는 질문에 대응하기 위한 핵심 로직입니다.
+
+#### **기본 수식**
+
+* : 갱신된 Untrust Score
+* : 현재 리포트된 이벤트 점수 (0, 20, 50)
+* : 가중치 (0 ~ 1)
+
+#### **가변 가중치 정책 (의 차별화)**
+
+1. **공격 가중치 ():** * 공격 시나리오 감지 시 적용.
+* 과거의 낮은 점수에 매몰되지 않고, 위험 징후를 빠르게 반영하여 **차단 지점(23점)**까지 조기에 도달하게 함.
+
+
+2. **복구 가중치 ():** * AKA 성공(정상 망 확정) 시 적용.
+* 보안성보다 **가용성**을 우선시하여, 단 한 번의 정상 리포트만으로도 누적된 불신 점수를 상쇄하고 즉시 서비스를 정상화함.
+
+
+
+---
+
+### 3. 상태 전이도 (State Transition Table)
+
+평가 기준인 Threshold를 명확히 정의합니다.
+
+| 현재 Score | 판정 상태 | 시스템 제어 동작 | 비고 |
+| --- | --- | --- | --- |
+| **0 ~ 10** | **Normal** | 모든 서비스 허용 | 일반적인 대기 상태 |
+| **10 ~ 23** | **Suspicious** | **Low Priority** 적용 | 주변에 다른 셀이 있으면 이동 유도 |
+| **23 이상** | **Malicious** | **Cell Barring** 수행 | 해당 Cell ID 접속 전면 차단 |
+
+---
+
+### 💡 회의에서 강조할 클로징 멘트
+
+> "저희의 핵심 차별점은 **'공격자의 패턴을 역이용한다'**는 점입니다. 공격자가 정상 Cell ID를 도용해 우리 망을 마비시키려 해도, 저희 시스템은 **AKA 인증 성공이라는 '공격자가 넘을 수 없는 벽'**을 복구 트리거로 사용하기 때문에, 보안을 챙기면서도 실제 사용자의 서비스 가용성을 획기적으로 보호할 수 있습니다."
+
+이 정도면 프리뷰 미팅에서 충분히 좋은 피드백을 받으실 수 있을 거예요. 혹시 발표 슬라이드 구성을 위해 **공격 시나리오별 상세 플로우 차트**가 추가로 필요하신가요?
