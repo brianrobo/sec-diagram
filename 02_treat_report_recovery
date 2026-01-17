@@ -1,0 +1,164 @@
+sequenceDiagram
+    autonumber
+    participant UE as UE (User Equipment)
+    participant FBS as Suspicious gNB/eNB
+    participant LegitBS as Legitimate gNB/eNB
+    participant TS as Trust Server
+    participant CN as Core Network (AMF/MME)
+
+    Note over UE,CN: 확장 가능한 위협 시나리오 탐지 및 복구 프레임워크
+
+    alt Scenario A: IMSI Catcher Detection
+        rect rgb(255, 230, 230)
+        Note over UE,FBS: A-1. IMSI Catcher Attack Pattern
+
+        Note over FBS: FBS broadcasts strong signal<br/>with different TAC
+        UE->>UE: A3 Handover Event Triggered<br/>(FBS RSRP > Current Cell + Offset)
+        UE->>LegitBS: Measurement Report<br/>(Target: FBS PCI, RSRP, RSRQ)
+        LegitBS->>UE: RRCConnectionReconfiguration<br/>(Handover Command to FBS)
+
+        UE->>FBS: RACH Preamble (Msg1)
+        FBS--xUE: No RAR Response<br/>(Intentional ignore)
+        UE->>UE: T304 Timer Expiry<br/>→ Handover Failure
+
+        UE->>FBS: RRCConnectionReestablishmentRequest<br/>(reestablishmentCause=handoverFailure)
+        FBS->>UE: RRCConnectionReestablishmentReject
+
+        Note over UE: Enter RRC_IDLE<br/>Keep NAS Security Context
+
+        UE->>UE: Cell Reselection → FBS<br/>(Strongest signal)
+        UE->>FBS: RRCConnectionRequest<br/>(establishmentCause=mo-Signalling)
+        FBS->>UE: RRCConnectionSetup
+
+        Note over UE,FBS: NAS: Tracking Area Update
+        UE->>FBS: TRACKING AREA UPDATE REQUEST<br/>(Old GUTI, Old TAI, NAS-MAC)
+        FBS->>UE: IDENTITY REQUEST<br/>(Identity Type = IMSI)
+
+        Note over UE: ⚠️ IMSI Catcher Pattern Detected!<br/>Pattern: HO Failure → Reest Reject → TAU → Identity Req
+
+        UE->>UE: Determine Report Score<br/>IMSI_CATCHER → report_score = 20
+        UE->>UE: Extract Global Cell ID from FBS SIB1<br/>CellID = "450-05-eNB9999-Cell0"
+
+        UE->>TS: THREAT_REPORT<br/>{<br/>"cell_id": "450-05-eNB9999-Cell0",<br/>"threat_type": "IMSI_CATCHER",<br/>"report_score": 20,<br/>"evidence": {<br/>  "handover_failure": true,<br/>  "reestablishment_reject": true,<br/>  "identity_request_type": "IMSI",<br/>  "tac_mismatch": true<br/>},<br/>"timestamp": "2026-01-17T10:35:22Z"<br/>}
+
+        TS->>TS: EMA Calculation (α=0.4)<br/>Current: 8.0, Report: 20<br/>New = (0.4×20) + (0.6×8.0) = 12.8<br/>Status: LOW_PRIORITY
+        TS->>UE: THREAT_REPORT_ACK<br/>{<br/>"cell_id": "450-05-eNB9999-Cell0",<br/>"updated_score": 12.8,<br/>"alpha_used": 0.4,<br/>"status": "LOW_PRIORITY"<br/>}
+
+        UE->>UE: Add Cell to Local Barring List<br/>Mark FBS as HIGH RISK
+
+        Note over UE: UE refuses IDENTITY RESPONSE<br/>or performs PLMN reselection
+        end
+    else Scenario B: Null Cipher Detection
+        rect rgb(255, 245, 230)
+        Note over UE,FBS: B-1. Null Cipher Attack Pattern
+
+        UE->>FBS: ATTACH REQUEST<br/>(GUTI or IMSI, UE Network Capability)
+        FBS->>UE: AUTHENTICATION REQUEST<br/>(RAND, AUTN)
+        UE->>FBS: AUTHENTICATION RESPONSE<br/>(RES)
+
+        FBS->>UE: SECURITY MODE COMMAND<br/>⚠️ Selected NAS Algorithm: EEA0 (Null Encryption)<br/>Selected Integrity Algo: EIA0 (Null Integrity)
+
+        Note over UE: ⚠️ Null Cipher Detected!<br/>EEA0/EIA0 = No Security
+
+        UE->>UE: Check UE Capability<br/>UE supports: EEA1, EEA2, EIA1, EIA2<br/>Network selected: EEA0, EIA0<br/>→ Downgrade Attack Suspected
+
+        UE->>UE: Determine Report Score<br/>NULL_CIPHER → report_score = 50
+        UE->>UE: Extract Global Cell ID<br/>CellID = "450-05-eNB8888-Cell1"
+
+        UE->>TS: THREAT_REPORT<br/>{<br/>"cell_id": "450-05-eNB8888-Cell1",<br/>"threat_type": "NULL_CIPHER",<br/>"report_score": 50,<br/>"evidence": {<br/>  "selected_encryption": "EEA0",<br/>  "selected_integrity": "EIA0",<br/>  "ue_supported_algos": ["EEA1", "EEA2", "EIA1", "EIA2"],<br/>  "downgrade_detected": true<br/>},<br/>"timestamp": "2026-01-17T11:20:15Z"<br/>}
+
+        TS->>TS: EMA Calculation (α=0.4)<br/>Current: 15.7, Report: 50<br/>New = (0.4×50) + (0.6×15.7) = 29.4<br/>Status: CELL_BARRING 🔴
+        TS->>UE: THREAT_REPORT_ACK<br/>{<br/>"cell_id": "450-05-eNB8888-Cell1",<br/>"updated_score": 29.4,<br/>"alpha_used": 0.4,<br/>"status": "CELL_BARRING"<br/>}
+
+        UE->>UE: Mark Cell as LOW PRIORITY<br/>Apply negative ranking offset
+
+        UE->>FBS: SECURITY MODE REJECT<br/>(EMM Cause: UE security capabilities mismatch)
+
+        Note over UE: Perform Cell Reselection<br/>to avoid Null Cipher cell
+        end
+    else Scenario C: Recovery (AKA Success)
+        rect rgb(240, 255, 240)
+        Note over UE,LegitBS: C-1. Legitimate Cell Authentication Success
+
+        Note over UE: Cell previously reported as suspicious<br/>CellID = "450-05-eNB7777-Cell2"<br/>Current Score: 35 (LOW_PRIORITY)
+
+        UE->>LegitBS: ATTACH REQUEST / REGISTRATION REQUEST<br/>(GUTI, Last Visited TAI)
+        LegitBS->>CN: Forward Attach Request
+
+        CN->>LegitBS: AUTHENTICATION REQUEST<br/>(RAND, AUTN - legitimate values)
+        LegitBS->>UE: AUTHENTICATION REQUEST
+
+        UE->>UE: Verify AUTN<br/>Calculate XRES from USIM<br/>Check SQN (Sequence Number)
+
+        Note over UE: ✅ AUTN Verification SUCCESS<br/>This indicates legitimate network
+
+        UE->>LegitBS: AUTHENTICATION RESPONSE<br/>(RES)
+        LegitBS->>CN: Forward Auth Response
+
+        CN->>CN: Verify RES = XRES<br/>Authentication SUCCESS
+
+        CN->>LegitBS: SECURITY MODE COMMAND<br/>(Selected: EEA2, EIA2 - Strong Encryption)
+        LegitBS->>UE: SECURITY MODE COMMAND
+
+        UE->>UE: Verify strong encryption selected<br/>EEA2/EIA2 confirmed
+
+        UE->>LegitBS: SECURITY MODE COMPLETE<br/>(NAS-MAC verified)
+        LegitBS->>CN: Forward Security Mode Complete
+
+        Note over UE: ✅ Full AKA Success with Strong Encryption<br/>Cell is LEGITIMATE
+
+        UE->>UE: Determine Report Score<br/>AKA_SUCCESS → report_score = 0<br/>CellID = "450-05-eNB7777-Cell2"
+
+        UE->>TS: RECOVERY_REPORT<br/>{<br/>"cell_id": "450-05-eNB7777-Cell2",<br/>"event_type": "AKA_SUCCESS",<br/>"report_score": 0,<br/>"evidence": {<br/>  "authentication_success": true,<br/>  "autn_verified": true,<br/>  "encryption_algo": "EEA2",<br/>  "integrity_algo": "EIA2",<br/>  "security_mode_complete": true<br/>},<br/>"timestamp": "2026-01-17T12:45:30Z"<br/>}
+
+        TS->>TS: EMA Calculation (α=0.8)<br/>Current: 24.7, Report: 0<br/>New = (0.8×0) + (0.2×24.7) = 4.9<br/>Status: NORMAL ✅
+        TS->>UE: RECOVERY_REPORT_ACK<br/>{<br/>"cell_id": "450-05-eNB7777-Cell2",<br/>"updated_score": 4.9,<br/>"alpha_used": 0.8,<br/>"status": "NORMAL"<br/>}
+
+        UE->>UE: Remove from Low Priority List<br/>Restore normal ranking
+
+        CN->>LegitBS: ATTACH ACCEPT / REGISTRATION ACCEPT
+        LegitBS->>UE: ATTACH ACCEPT / REGISTRATION ACCEPT
+
+        Note over UE,CN: ✅ Successfully connected to<br/>RECOVERED LEGITIMATE CELL
+        end
+    else Scenario D: [Future] Bidding Down Attack
+        rect rgb(245, 245, 255)
+        Note over UE,FBS: D-1. Bidding Down Attack Pattern (확장 예시)
+
+        Note over UE: UE in 5G SA Mode<br/>Supports NR + LTE + UMTS
+
+        FBS->>UE: RRC Release with Redirection<br/>(Target: 4G LTE, Cause: Load Balancing)
+
+        Note over UE: ⚠️ Suspicious Redirection<br/>5G signal is strong, but forced to 4G
+
+        UE->>FBS: Re-attach in LTE mode
+        FBS->>UE: Security Mode Command<br/>(LTE with weaker encryption)
+
+        Note over UE: ⚠️ Bidding Down Detected!<br/>Pattern: 5G → 4G without valid reason
+
+        UE->>UE: Calculate Untrust Score Increment<br/>BIDDING_DOWN_SCORE = +20
+
+        UE->>TS: THREAT_REPORT<br/>{<br/>"cell_id": "450-05-gNB6666-Cell3",<br/>"threat_type": "BIDDING_DOWN",<br/>"report_score": 30,<br/>"evidence": {<br/>  "forced_rat_change": "5G_to_4G",<br/>  "nr_signal_strength": "STRONG",<br/>  "redirection_cause": "Load_Balancing",<br/>  "suspicious": true<br/>}<br/>}
+
+        TS->>TS: EMA Calculation (α=0.4)<br/>Current: 10.5, Report: 30<br/>New = (0.4×30) + (0.6×10.5) = 18.3
+        TS->>UE: THREAT_REPORT_ACK<br/>{"updated_score": 18.3, "status": "LOW_PRIORITY"}
+
+        Note over UE,TS: 새로운 공격 패턴을<br/>동일한 프레임워크로 처리
+        end
+    else Scenario E: [Future] Custom Threat Scenario
+        rect rgb(250, 250, 250)
+        Note over UE,TS: E-1. Extensible Framework for New Threats
+
+        Note over UE: 새로운 공격 패턴 추가 시:<br/>1. 패턴 정의 (워크플로우)<br/>2. 점수 증감 값 설정<br/>3. Evidence 필드 정의<br/>4. Trust Server에 보고
+
+        Note over TS: 중앙 서버에서<br/>새로운 위협 타입 등록 및<br/>모든 UE에 배포
+
+        Note over UE,TS: 확장 가능한 아키텍처로<br/>미래의 위협에 대응
+        end
+    end
+
+    rect rgb(255, 255, 224)
+    Note over UE,TS: Score Update Summary
+
+    Note over TS: Trust Server Database State (EMA):<br/>━━━━━━━━━━━━━━━━━━━━━━━<br/>Cell ID: 450-05-eNB9999-Cell0<br/>  Score: 27.9 (CELL_BARRING 🔴)<br/>  Threats: [IMSI_CATCHER]<br/>  Reports: 8 (α=0.4)<br/>━━━━━━━━━━━━━━━━━━━━━━━<br/>Cell ID: 450-05-eNB8888-Cell1<br/>  Score: 29.4 (CELL_BARRING 🔴)<br/>  Threats: [NULL_CIPHER]<br/>  Reports: 4 (α=0.4)<br/>━━━━━━━━━━━━━━━━━━━━━━━<br/>Cell ID: 450-05-eNB7777-Cell2<br/>  Score: 4.9 (NORMAL ✅ - Recovered)<br/>  Recoveries: 2 (α=0.8)<br/>  Reports: 5<br/>━━━━━━━━━━━━━━━━━━━━━━━
+    end
