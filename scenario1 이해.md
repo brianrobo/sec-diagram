@@ -129,3 +129,14 @@ Scenario C (Attach Abuse): Attach Reject 수신 후 재시도 과정에서 Ident
 
 
    
+
+
+| 단계 (Phase) | 핵심 목적 (Core Objective) | 주요 수단 (Methods) |
+| :--- | :--- | :--- |
+| **Step 1: 유인 (Steering)** | 단말을 정상 망에서 분리하여 FBS로 유입 | Handover Failure, Redirection, High Power Signaling |
+| **Step 2: 유도 (Triggering)** | 단말이 스스로 신원(Identity)을 밝히게 함 | TAC Mismatch(TAU), Attach Reject, Silent Paging |
+| **Step 3: 추출 (Extraction)** | 보안 절차(AKA) 없이 IMSI 정보 탈취 | **Identity Request (Type: IMSI)** |
+| **Step 4: 종료 (Termination)** | 정보 획득 후 단말을 다시 IDLE로 방출 | NAS Reject (Cause #11, #13 등) |
+
+
+
